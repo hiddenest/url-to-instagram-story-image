@@ -32,7 +32,7 @@ const Page = () => {
   };
 
   return (
-    <div className='grid grid-cols-2 items-center gap-4 mx-auto my-8 max-w-screen-md'>
+    <div className='grid md:grid-cols-2 items-center gap-4 mx-auto my-8 max-w-screen-md max-md:px-4'>
       <Card className='aspect-[9/16] bg-gray-100 overflow-hidden p-0'>
         {imageData && (
           <img
