@@ -18,6 +18,11 @@ interface OGData {
   host: string;
 }
 
+interface PreparedImage {
+  dataUrl: string | null;
+  buffer: Buffer | null;
+}
+
 const MAX_DESCRIPTION_LENGTH = 50;
 const STORY_FONT_NAME = 'Story Sans';
 const require = createRequire(import.meta.url);
@@ -156,21 +161,37 @@ function generateLighterHarmoniousColor(baseColor: ReturnType<typeof Color.rgb>)
   return Color.hsl(newHue, newSaturation, newLightness);
 }
 
-async function generateGradient(imageUrl: string | null): Promise<string> {
-  const fallbackGradient = 'linear-gradient(180deg, #1f2937, #4b5563)';
-
+async function prepareImageForRendering(imageUrl: string | null): Promise<PreparedImage> {
   if (!imageUrl) {
-    return fallbackGradient;
+    return { dataUrl: null, buffer: null };
   }
 
   try {
     const response = await fetch(imageUrl);
     if (!response.ok) {
-      return fallbackGradient;
+      return { dataUrl: null, buffer: null };
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const sourceBuffer = Buffer.from(await response.arrayBuffer());
+    const pngBuffer = await sharp(sourceBuffer).rotate().png().toBuffer();
+
+    return {
+      dataUrl: `data:image/png;base64,${pngBuffer.toString('base64')}`,
+      buffer: pngBuffer,
+    };
+  } catch {
+    return { dataUrl: null, buffer: null };
+  }
+}
+
+async function generateGradientFromBuffer(buffer: Buffer | null): Promise<string> {
+  const fallbackGradient = 'linear-gradient(180deg, #1f2937, #4b5563)';
+
+  if (!buffer) {
+    return fallbackGradient;
+  }
+
+  try {
     const { dominant } = await sharp(buffer).stats();
     const baseColor = Color.rgb(dominant.r, dominant.g, dominant.b);
     const lighterColor = generateLighterHarmoniousColor(baseColor);
@@ -185,7 +206,8 @@ async function generateGradient(imageUrl: string | null): Promise<string> {
 
 export async function generateOGImage(url: string): Promise<string> {
   const ogData = await fetchOGData(url);
-  const gradient = await generateGradient(ogData.image);
+  const preparedImage = await prepareImageForRendering(ogData.image);
+  const gradient = await generateGradientFromBuffer(preparedImage.buffer);
   const fonts = await getFonts();
 
   const svg = await satori(
@@ -197,8 +219,8 @@ export async function generateOGImage(url: string): Promise<string> {
       }}
     >
       <div tw='flex flex-col w-4/5 overflow-hidden rounded-[40px] shadow-2xl border border-solid border-black/10'>
-        {ogData.image ? (
-          <img src={ogData.image} alt={ogData.title} tw='object-contain' />
+        {preparedImage.dataUrl ? (
+          <img src={preparedImage.dataUrl} alt={ogData.title} tw='object-contain' />
         ) : (
           <div tw='h-[640px] flex items-center justify-center bg-black/20 text-white text-3xl'>
             No preview image
