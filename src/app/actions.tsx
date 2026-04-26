@@ -234,9 +234,9 @@ async function generateGradientFromBuffer(buffer: Buffer | null): Promise<string
 export async function generateOGImage(url: string): Promise<string> {
   const ogData = await fetchOGData(url);
   const preparedImage = await prepareImageForRendering(ogData.image);
-  const gradient =
-    (preparedImage.buffer && (await generateGradientFromBuffer(preparedImage.buffer))) ||
-    (await generateGradient(ogData.image));
+  const gradient = preparedImage.buffer
+    ? await generateGradientFromBuffer(preparedImage.buffer)
+    : await generateGradient(ogData.image);
   const fonts = await getFonts();
 
   const svg = await satori(
