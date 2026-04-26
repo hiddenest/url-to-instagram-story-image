@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['@napi-rs/image'],
-  },
+  serverExternalPackages: ['@napi-rs/image'],
 };
 
 export default nextConfig;

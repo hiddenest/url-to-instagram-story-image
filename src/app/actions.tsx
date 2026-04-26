@@ -9,35 +9,64 @@ import Color from 'color';
 interface OGData {
   title: string;
   description: string;
-  image: string;
+  image: string | null;
   host: string;
 }
 
+function getMetaContent(root: ReturnType<typeof parse>, selector: string): string {
+  return root.querySelector(selector)?.getAttribute('content')?.trim() || '';
+}
+
 async function fetchOGData(url: string): Promise<OGData> {
-  const response = await fetch(url);
-  const html = await response.text();
-  const root = parse(html);
+  const parsedUrl = new URL(url);
+  const host = parsedUrl.host;
 
-  const title =
-    root.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
-    '';
-  let description =
-    root
-      .querySelector('meta[property="og:description"]')
-      ?.getAttribute('content') || '';
-  const image =
-    root.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
-    '';
+  try {
+    const response = await fetch(parsedUrl.toString(), {
+      redirect: 'follow',
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; OGStoryGenerator/1.0)',
+      },
+    });
 
-  // Get host from url
-  const host = url.split('/')[2];
+    if (!response.ok) {
+      throw new Error(`Failed to fetch page: ${response.status}`);
+    }
 
-  // add ... to description if it's too long
-  if (description.length > 50) {
-    description = description.slice(0, 50) + '...';
+    const html = await response.text();
+    const root = parse(html);
+
+    const title =
+      getMetaContent(root, 'meta[property="og:title"]') ||
+      getMetaContent(root, 'meta[name="twitter:title"]') ||
+      root.querySelector('title')?.text.trim() ||
+      host;
+
+    let description =
+      getMetaContent(root, 'meta[property="og:description"]') ||
+      getMetaContent(root, 'meta[name="twitter:description"]');
+
+    if (description.length > 120) {
+      description = `${description.slice(0, 120)}...`;
+    }
+
+    const imageCandidate =
+      getMetaContent(root, 'meta[property="og:image"]') ||
+      getMetaContent(root, 'meta[name="twitter:image"]');
+
+    const image = imageCandidate
+      ? new URL(imageCandidate, response.url).toString()
+      : null;
+
+    return { title, description, image, host };
+  } catch {
+    return {
+      title: host,
+      description: '',
+      image: null,
+      host,
+    };
   }
-
-  return { title, description, image, host };
 }
 
 function generateLighterHarmoniousColor(baseColor: Color): Color {
@@ -55,19 +84,31 @@ function generateLighterHarmoniousColor(baseColor: Color): Color {
   return Color.hsl(newHue, newSaturation, newLightness);
 }
 
-async function generateGradient(imageUrl: string): Promise<string> {
-  const response = await fetch(imageUrl);
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+async function generateGradient(imageUrl: string | null): Promise<string> {
+  const fallbackGradient = 'linear-gradient(180deg, #1f2937, #4b5563)';
 
-  const { dominant } = await sharp(buffer).stats();
-  const baseColor = Color.rgb(dominant.r, dominant.g, dominant.b);
+  if (!imageUrl) {
+    return fallbackGradient;
+  }
 
-  const lighterColor = generateLighterHarmoniousColor(baseColor);
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      return fallbackGradient;
+    }
 
-  return `linear-gradient(180deg, ${baseColor.rgb().string()}, ${lighterColor
-    .rgb()
-    .string()})`;
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const { dominant } = await sharp(buffer).stats();
+    const baseColor = Color.rgb(dominant.r, dominant.g, dominant.b);
+    const lighterColor = generateLighterHarmoniousColor(baseColor);
+
+    return `linear-gradient(180deg, ${baseColor.rgb().string()}, ${lighterColor
+      .rgb()
+      .string()})`;
+  } catch {
+    return fallbackGradient;
+  }
 }
 
 export async function generateOGImage(url: string): Promise<string> {
@@ -94,7 +135,13 @@ export async function generateOGImage(url: string): Promise<string> {
       }}
     >
       <div tw='flex flex-col w-4/5 overflow-hidden rounded-[40px] shadow-2xl border border-solid border-black/10'>
-        <img src={ogData.image} tw='object-contain' />
+        {ogData.image ? (
+          <img src={ogData.image} tw='object-contain' />
+        ) : (
+          <div tw='h-[640px] flex items-center justify-center bg-black/20 text-white text-3xl'>
+            No preview image
+          </div>
+        )}
         <div tw='flex flex-col px-10 pt-7 pb-9 bg-white'>
           <h1 tw='w-full text-4xl leading-snug font-medium mb-0.5 text-[#08090A] m-0 mb-1'>
             {ogData.title}
