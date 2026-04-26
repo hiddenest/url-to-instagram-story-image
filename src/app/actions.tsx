@@ -161,33 +161,6 @@ function generateLighterHarmoniousColor(baseColor: ReturnType<typeof Color.rgb>)
   return Color.hsl(newHue, newSaturation, newLightness);
 }
 
-async function generateGradient(imageUrl: string | null): Promise<string> {
-  const fallbackGradient = 'linear-gradient(180deg, #1f2937, #4b5563)';
-
-  if (!imageUrl) {
-    return fallbackGradient;
-  }
-
-  try {
-    const response = await fetch(imageUrl);
-    if (!response.ok) {
-      return fallbackGradient;
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const { dominant } = await sharp(buffer).stats();
-    const baseColor = Color.rgb(dominant.r, dominant.g, dominant.b);
-    const lighterColor = generateLighterHarmoniousColor(baseColor);
-
-    return `linear-gradient(180deg, ${baseColor.rgb().string()}, ${lighterColor
-      .rgb()
-      .string()})`;
-  } catch {
-    return fallbackGradient;
-  }
-}
-
 async function prepareImageForRendering(imageUrl: string | null): Promise<PreparedImage> {
   if (!imageUrl) {
     return { dataUrl: null, buffer: null };
@@ -234,9 +207,7 @@ async function generateGradientFromBuffer(buffer: Buffer | null): Promise<string
 export async function generateOGImage(url: string): Promise<string> {
   const ogData = await fetchOGData(url);
   const preparedImage = await prepareImageForRendering(ogData.image);
-  const gradient = preparedImage.buffer
-    ? await generateGradientFromBuffer(preparedImage.buffer)
-    : await generateGradient(ogData.image);
+  const gradient = await generateGradientFromBuffer(preparedImage.buffer);
   const fonts = await getFonts();
 
   const svg = await satori(
